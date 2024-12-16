@@ -1,0 +1,82 @@
+import whisper
+import os
+from docx import Document  # Import the Document class from python-docx
+from docx.shared import Pt  # Import Pt for point size
+from docx.oxml.ns import qn  # Import qn for specifying XML namespaces
+from docx.oxml import OxmlElement  # Import for creating custom XML elements
+
+def transcribe_audio(audio_file):
+    """Uses OpenAI's Whisper to transcribe the audio with timecodes every 20 seconds."""
+    model = whisper.load_model("base")  # Use 'base' model, or 'small', 'medium', 'large'
+    result = model.transcribe(audio_file, verbose=True)  # Set verbose to True for detailed output
+    
+    transcript_with_timecodes = ""
+    current_time = 0  # Start from 0 seconds
+    time_interval = 20  # Time interval in seconds
+
+    for segment in result["segments"]:
+        start_time = segment["start"]
+        end_time = segment["end"]
+        text = segment["text"]
+
+        # Include a timecode every 20 seconds
+        if start_time >= current_time:
+            minutes = int(start_time // 60)
+            seconds = int(start_time % 60)
+            transcript_with_timecodes += f"[{minutes:02}:{seconds:02}] "  # Format as MM:SS
+            current_time += time_interval
+
+        transcript_with_timecodes += text + " "
+
+    return transcript_with_timecodes.strip()  # Return the full transcript
+
+def add_page_number(section):
+    """Adds a centered page number to the footer of a section."""
+    footer = section.footer
+    paragraph = footer.paragraphs[0]
+    paragraph.alignment = 1  # Center the page number
+
+    # Create field code for page number
+    fldChar1 = OxmlElement('w:fldChar')  # Create field character element
+    fldChar1.set(qn('w:fldCharType'), 'begin')
+
+    instrText = OxmlElement('w:instrText')  # Create instruction text element
+    instrText.text = 'PAGE'  # Field instruction for page number
+
+    fldChar2 = OxmlElement('w:fldChar')
+    fldChar2.set(qn('w:fldCharType'), 'end')
+
+    paragraph._element.append(fldChar1)
+    paragraph._element.append(instrText)
+    paragraph._element.append(fldChar2)
+
+def save_transcript_as_doc(transcript, filename, audio_file_name):
+    """Saves the transcript to a .docx file with specific font and size, including page numbers."""
+    doc = Document()  # Create a new Document
+    doc.add_heading('Transcript', level=1)  # Optional: Add a title
+    doc.add_heading(audio_file_name, level=2)  # Add the audio file name as a subtitle
+
+    # Add the transcript as a paragraph with specific font and size
+    paragraph = doc.add_paragraph()  # Create a new paragraph
+    run = paragraph.add_run(transcript)  # Add text to the paragraph
+    run.font.name = 'Helvetica'  # Set font to Helvetica
+    run.font.size = Pt(12)  # Set font size to 12pt
+
+    # Add page numbers to the footer of each section
+    for section in doc.sections:
+        add_page_number(section)
+
+    doc.save(filename)  # Save the document
+
+# Main Logic
+audio_files = ["filename"]  # Replace with your .m4a file name
+
+for audio_file in audio_files:
+    print(f"Processing {audio_file}...")
+    transcript = transcribe_audio(audio_file)
+
+    # Save the transcript with a custom name as a .docx file
+    doc_filename = f"{os.path.splitext(audio_file)[0]}_transcript.docx"
+    save_transcript_as_doc(transcript, doc_filename, audio_file)  # Pass the audio file name to the function
+    
+    print(f"Transcript saved to {doc_filename}")
